@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification Settings - Ducalis.io</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+</head>
+<body class="bg-gray-900 text-gray-200 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-semibold mb-8">Notification Settings</h1>
+        
+        <div id="notification-groups">
+            <!-- Notification groups will be rendered here -->
+        </div>
+    </div>
+
+    <!-- Notification Card Template -->
+    <template id="notification-template">
+        <div id="{id}" class="bg-gray-800/40 hover:bg-gray-800/60 rounded-xl p-5 mb-4 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-200">
+            <div class="flex items-start justify-between mb-6">
+                <div class="flex items-center gap-4">
+                    <i class="ph ph-{icon} text-gray-400 text-xl"></i>
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-100">{title}</h3>
+                        <p class="text-gray-400 text-sm mt-1">{description}</p>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button class="notification-channel p-2 rounded-lg hover:bg-gray-700/50 transition-colors" data-channel="email">
+                        <i class="ph ph-envelope text-yellow-600 hover:text-yellow-500 text-lg"></i>
+                    </button>
+                    <button class="notification-channel p-2 rounded-lg hover:bg-gray-700/50 transition-colors" data-channel="mattermost">
+                        <i class="ph ph-clock text-yellow-600 hover:text-yellow-500 text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button class="all-boards-toggle w-full" data-tooltip="Toggle between all boards or specific selection">
+                    <div class="flex items-center justify-between p-3 hover:bg-gray-700/30 rounded-lg transition-colors">
+                        <div class="flex items-center gap-3">
+                            <div class="toggle-switch">
+                                <input type="checkbox" class="hidden" checked>
+                                <div class="w-10 h-6 bg-yellow-600/20 rounded-full p-1 cursor-pointer">
+                                    <div class="toggle-dot w-4 h-4 bg-yellow-600 rounded-full transition-transform duration-200"></div>
+                                </div>
+                            </div>
+                            <label class="text-sm font-medium text-gray-300 cursor-pointer board-count">All boards (120)</label>
+                        </div>
+                    </div>
+                </button>
+
+                <div class="board-selection hidden mt-4">
+                    <div class="relative">
+                        <input type="text" 
+                               class="board-search w-full bg-gray-700/50 rounded-lg pl-10 pr-24 py-2.5 text-sm text-gray-200 placeholder-gray-400 border border-gray-600/50 focus:border-gray-500/50 focus:outline-none focus:ring-0"
+                               placeholder="Search boards...">
+                        <i class="ph ph-magnifying-glass absolute left-3 top-2.5 text-gray-400"></i>
+                        <button class="search-clear-btn hidden absolute right-3 top-1.5 px-2 py-1 text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1.5 text-sm">
+                            <span>esc</span>
+                            <i class="ph ph-x"></i>
+                        </button>
+                        
+                        <!-- Dropdown для списка бордов -->
+                        <div class="board-dropdown hidden absolute w-full mt-2 bg-gray-800/95 backdrop-blur-sm rounded-lg border border-gray-700/50 shadow-lg z-10">
+                            <div class="board-list max-h-64 overflow-y-auto custom-scrollbar">
+                                <!-- Board options will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Selected boards tags -->
+                    <div class="selected-boards flex flex-wrap gap-2 mt-3">
+                        <!-- Selected boards will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.3);
+            border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.5);
+        }
+
+        .toggle-switch input:checked + div .toggle-dot {
+            transform: translateX(16px);
+        }
+
+        .toggle-switch input:not(:checked) + div {
+            background: rgba(156, 163, 175, 0.2);
+        }
+
+        .toggle-switch input:not(:checked) + div .toggle-dot {
+            background: rgb(156, 163, 175);
+        }
+
+        /* Добавим стили для тултипов */
+        [data-tooltip] {
+            position: relative;
+        }
+
+        [data-tooltip]:before {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            font-size: 12px;
+            white-space: nowrap;
+            border-radius: 4px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s;
+        }
+
+        [data-tooltip]:hover:before {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* Предотвращаем горизонтальный скролл */
+        .selected-boards,
+        .board-list,
+        .board-dropdown {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        /* Обеспечиваем правильное поведение flex-контейнера */
+        .board-list > div > div {
+            min-width: 0;
+            width: 100%;
+        }
+
+        /* Обновляем стили для тултипов */
+        [data-tooltip]:before {
+            z-index: 20;
+        }
+
+        /* Обновляем позиционирование тултипов для кнопок в дропдауне */
+        .board-dropdown [data-tooltip]:before {
+            bottom: auto;
+            top: 100%;
+            margin-bottom: 0;
+            margin-top: 8px;
+        }
+
+        /* Фиксированная высота для шапки */
+        .board-list-header {
+            min-height: 88px; /* Высота для двух строк контента */
+        }
+
+        /* Увеличиваем высоту списка */
+        .board-list {
+            max-height: 400px !important; /* Увеличиваем с 64px до 400px */
+        }
+
+        /* Обновляем стили для тултипов в дропдауне */
+        .board-dropdown [data-tooltip] {
+            position: relative;
+        }
+
+        .board-dropdown [data-tooltip]:before {
+            bottom: auto;
+            top: -8px;
+            transform: translateX(-50%) translateY(-100%);
+            margin: 0;
+        }
+
+        /* Предотвращаем обрезание тултипов */
+        .board-dropdown {
+            padding: 8px 0; /* Добавляем отступы сверху и снизу */
+        }
+
+        /* Фиксируем позицию кнопки очистки поиска */
+        .search-clear-btn {
+            top: 50% !important;
+            transform: translateY(-50%);
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+        }
+    </style>
+
+    <script src="app.js"></script>
+</body>
+</html> 
