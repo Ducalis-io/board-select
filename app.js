@@ -1,11 +1,40 @@
 // Generate 120 sample boards
-const boards = Array.from({ length: 120 }, (_, i) => ({
-    id: i + 1,
-    name: `Board ${String(i + 1).padStart(3, '0')} - ${[
+const boards = Array.from({ length: 120 }, (_, i) => {
+    const teamIndex = i % 10;
+    const team = [
         'Product', 'Marketing', 'Development', 'Sales', 'Support',
         'HR', 'Finance', 'Operations', 'Research', 'Design'
-    ][i % 10]} Team ${Math.floor(i / 10) + 1}`
-}));
+    ][teamIndex];
+    const teamNumber = Math.floor(i / 10) + 1;
+    const boardName = `Board ${String(i + 1).padStart(3, '0')} - ${team} Team ${teamNumber}`;
+
+    // Add voting board data to 10% of boards
+    let voting = null;
+    if (i % 10 === 0) { // Every 10th board
+        const votingNames = [
+            "Public Roadmap", "Customer Requests", "Feature Voting", "Ideas Portal",
+            "Community Feedback", "Product Backlog", "User Suggestions", "Open Ideas",
+            "Client Input", "Future Features"
+        ];
+        voting = {
+            name: votingNames[i / 10 % votingNames.length], // Cycle through names
+            icon: "lightbulb"
+        };
+    }
+
+    // Add "My estimations" to 30% of boards
+    const myEstimations = i % 3 === 0 ? true : null; // Every third board
+    const facilitator = i % 4 === 0 ? true : null; // Every fourth board
+
+    return {
+        id: i + 1,
+        name: boardName,
+        voting: voting,
+        myEstimations: myEstimations,
+        facilitator: facilitator, // ADDED facilitator property
+        searchText: voting ? `voting ${boardName} ${voting.name}`.toLowerCase() : boardName.toLowerCase() // Added for search
+    };
+});
 
 // Notification structure
 const notificationGroups = [
@@ -89,7 +118,10 @@ function initNotificationStates() {
                     email: true,
                     mattermost: true
                 },
-                searchTerm: ''
+                searchTerm: '',
+                votingFilterEnabled: false,
+                myEstimationsFilterEnabled: false,
+                facilitatorFilterEnabled: false // ADDED facilitatorFilterEnabled
             });
         });
     });
@@ -116,7 +148,9 @@ function renderNotifications() {
                         .replace('{icon}', notification.icon)
                         .replace('{title}', notification.title)
                         .replace('{description}', notification.description)
-                        .replace(/\{id\}/g, notification.id);
+                        .replace(/\{id\}/g, notification.id)
+                        .replace('data-channel="email"', 'data-channel="email" data-tooltip="Toggle email notifications"')
+                        .replace('data-channel="mattermost"', 'data-channel="mattermost" data-tooltip="Toggle Mattermost notifications"');
                 }).join('')}
             </div>
         </section>
@@ -210,78 +244,47 @@ function toggleChannel(notificationId, channel) {
     button.classList.toggle('text-gray-600');
 }
 
-// Добавим функцию highlightMatch в глобальную область видимости
-function highlightMatch(text) {
+// Обновим функцию highlightMatch
+function highlightMatch(text, searchTerm) {
     if (!searchTerm) return text;
-    const regex = new RegExp(`(${searchTerm})`, 'gi');
-    return text.replace(regex, '<span class="bg-yellow-600/20 text-yellow-200">$1</span>');
+    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // Экранируем спецсимволы
+    const regex = new RegExp(`(${escapedSearchTerm})`, 'gi');
+    return text.replace(regex, '<mark class="bg-yellow-600/20 text-yellow-200">$1</mark>');
 }
 
-// Обновим setupBoardSelectionHandlers
-function setupBoardSelectionHandlers(notificationElement, notificationId) {
-    const searchInput = notificationElement.querySelector('.board-search');
-    const searchClearBtn = notificationElement.querySelector('.search-clear-btn');
-    const boardDropdown = notificationElement.querySelector('.board-dropdown');
-    const state = notificationStates.get(notificationId);
-    
-    if (!state.searchTerm) state.searchTerm = '';
+// Состояния кнопки поиска
+const SearchButtonState = {
+    HIDDEN: 'hidden',
+    CLEAR: 'clear',
+    CLOSE: 'close'
+};
 
-    // Показываем дропдаун при фокусе на поиск
-    searchInput.addEventListener('focus', () => {
-        updateSearchControls(notificationId);
-        renderBoardList(notificationId);
-        boardDropdown.classList.remove('hidden');
-    });
-
-    // Обработка клика вне дропдауна
-    document.addEventListener('click', (e) => {
-        const isClickInside = notificationElement.contains(e.target);
-        if (!isClickInside) {
-            boardDropdown.classList.add('hidden');
-        }
-    });
-
-    // Обработка Escape
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            if (state.searchTerm) {
-                clearSearch(notificationId);
-                searchInput.value = ''; // Явно очищаем значение инпута
-            } else {
-                boardDropdown.classList.add('hidden');
-                searchInput.blur();
-            }
-        }
-    });
-
-    // Обработка поиска
-    searchInput.addEventListener('input', (e) => {
-        state.searchTerm = e.target.value;
-        updateSearchControls(notificationId);
-        renderBoardList(notificationId);
-    });
-
-    // Обработка кнопки очистки/закрытия
-    searchClearBtn.addEventListener('click', () => {
-        if (state.searchTerm) {
-            clearSearch(notificationId);
-        } else {
-            boardDropdown.classList.add('hidden');
-            searchInput.blur();
-        }
-    });
+// Функция определения состояния кнопки
+function getSearchButtonState(state, isDropdownVisible) {
+    if (!isDropdownVisible) {
+        return SearchButtonState.HIDDEN;
+    }
+    return state.searchTerm ? SearchButtonState.CLEAR : SearchButtonState.CLOSE;
 }
 
-// Обновим updateSearchControls
+// Обновленная функция updateSearchControls
 function updateSearchControls(notificationId) {
     const state = notificationStates.get(notificationId);
     const notificationElement = document.getElementById(notificationId);
     const searchInput = notificationElement.querySelector('.board-search');
     const searchClearBtn = notificationElement.querySelector('.search-clear-btn');
+    const boardDropdown = notificationElement.querySelector('.board-dropdown');
+    const isDropdownVisible = !boardDropdown.classList.contains('hidden');
 
-    if (document.activeElement === searchInput) {
+    // Определяем состояние кнопки
+    const buttonState = getSearchButtonState(state, isDropdownVisible);
+
+    // Обновляем видимость и содержимое кнопки
+    if (buttonState === SearchButtonState.HIDDEN) {
+        searchClearBtn.classList.add('hidden');
+    } else {
         searchClearBtn.classList.remove('hidden');
-        if (state.searchTerm) {
+        if (buttonState === SearchButtonState.CLEAR) {
             searchClearBtn.innerHTML = `
                 <span>Clear [esc]</span>
                 <i class="ph ph-backspace"></i>
@@ -294,19 +297,87 @@ function updateSearchControls(notificationId) {
             `;
             searchClearBtn.setAttribute('data-tooltip', 'Close board selection dropdown');
         }
-    } else {
-        searchClearBtn.classList.add('hidden');
     }
 
-    // Обновляем плейсхолдер и тултип для поиска
-    searchInput.placeholder = "Search, add or remove boards...";
-    searchInput.setAttribute('data-tooltip', 
-        'Search boards by name\n' +
-        'Add filtered boards with "+ Add"\n' +
-        'Remove filtered boards with "- Remove"\n' +
-        'Clear all selected boards with "Clear"\n' +
-        'Press Esc to clear search or close dropdown'
-    );
+    // Обновляем плейсхолдер и тултип поисковой строки
+    if (isDropdownVisible) {
+        searchInput.placeholder = "Search, add or remove boards...";
+    } else {
+        searchInput.placeholder = "Click to search and manage boards...";
+    }
+
+    // Обновляем плейсхолдер и тултип поисковой строки
+    searchInput.setAttribute('data-tooltip', isDropdownVisible ? `Search, add or remove boards... Tip: type "voting" to find boards with linked voting boards` : `Click to search and manage boards...`);
+}
+
+// Обновим обработчики событий
+function setupBoardSelectionHandlers(notificationElement, notificationId) {
+    const searchInput = notificationElement.querySelector('.board-search');
+    const searchClearBtn = notificationElement.querySelector('.search-clear-btn');
+    const boardDropdown = notificationElement.querySelector('.board-dropdown');
+    const state = notificationStates.get(notificationId);
+
+    if (!state.searchTerm) state.searchTerm = '';
+
+    // Показываем дропдаун при фокусе на поиск
+    searchInput.addEventListener('focus', () => {
+        boardDropdown.classList.remove('hidden');
+        renderBoardList(notificationId);
+        updateSearchControls(notificationId);
+    });
+
+    // Добавляем обработчик события input
+    searchInput.addEventListener('input', () => {
+        state.searchTerm = searchInput.value;
+        renderBoardList(notificationId);
+        updateSearchControls(notificationId);
+    });
+
+    // Обработка клика вне дропдауна
+    document.addEventListener('click', (e) => {
+        const isClickInside = notificationElement.contains(e.target);
+        if (!isClickInside) {
+            boardDropdown.classList.add('hidden');
+            updateSearchControls(notificationId);
+        }
+    });
+
+    // Обработка Escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault(); // Предотвращаем стандартное поведение
+            const buttonState = getSearchButtonState(state, !boardDropdown.classList.contains('hidden'));
+
+            if (buttonState === SearchButtonState.CLEAR) {
+                clearSearch(notificationId);
+            } else if (buttonState === SearchButtonState.CLOSE) {
+                boardDropdown.classList.add('hidden');
+                searchInput.blur();
+                updateSearchControls(notificationId);
+            }
+        }
+    });
+
+    // Обработка кнопки очистки/закрытия
+    searchClearBtn.addEventListener('click', (e) => {
+        e.preventDefault(); // Предотвращаем всплытие события
+        e.stopPropagation(); // Предотвращаем всплытие события
+
+        const buttonState = getSearchButtonState(state, !boardDropdown.classList.contains('hidden'));
+
+        if (buttonState === SearchButtonState.CLEAR) {
+            clearSearch(notificationId);
+        } else if (buttonState === SearchButtonState.CLOSE) {
+            boardDropdown.classList.add('hidden');
+            searchInput.blur();
+            updateSearchControls(notificationId);
+        }
+    });
+
+    // Предотвращаем закрытие дропдауна при клике внутри
+    boardDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
 }
 
 // Обновим renderBoardList
@@ -315,40 +386,71 @@ function renderBoardList(notificationId) {
     const container = document.querySelector(`#${notificationId} .board-list`);
     if (!container) return;
 
-    const filteredBoards = boards.filter(board => 
-        board.name.toLowerCase().includes(state.searchTerm.toLowerCase())
+    // Apply search term, voting filter, myEstimations filter, and facilitator filter
+    let filteredBoards = boards.filter(board =>
+        board.searchText.includes(state.searchTerm.toLowerCase()) &&
+        (!state.votingFilterEnabled || board.voting) &&
+        (!state.myEstimationsFilterEnabled || board.myEstimations) &&
+        (!state.facilitatorFilterEnabled || board.facilitator)
     );
 
-    const selectedFilteredCount = filteredBoards.filter(board => 
+    const selectedFilteredCount = filteredBoards.filter(board =>
         state.selectedBoards.has(board.id)
     ).length;
+
+    const availableToAddCount = filteredBoards.length - selectedFilteredCount;
+
+    const votingBoardsCount = filteredBoards.filter(board => board.voting).length;
+    const myEstimationsCount = filteredBoards.filter(board => board.myEstimations).length;
+    const facilitatorCount = filteredBoards.filter(board => board.facilitator).length;
 
     const controlsHTML = `
         <div class="sticky top-0 bg-gray-800/95 backdrop-blur-sm border-b border-gray-700/50 z-10">
             <div class="flex items-center justify-between p-3">
-                <div class="flex items-center gap-3">
-                    <span class="text-gray-400 text-sm">
-                        ${state.searchTerm ? 
-                            `Filtered: <span class="text-gray-200 ml-1">${filteredBoards.length}</span> of ${boards.length}` : 
-                            `Total boards: <span class="text-gray-200 ml-1">${boards.length}</span>`
-                        }
+                <div class="flex items-center gap-2 text-xs text-gray-400">
+                    <span>
+                        ${state.searchTerm || state.votingFilterEnabled || state.myEstimationsFilterEnabled || state.facilitatorFilterEnabled ?
+                        `Filtered: <span class="text-gray-200">${filteredBoards.length}</span> of ${boards.length}` :
+                        `Total: <span class="text-gray-200">${boards.length}</span>`
+                    }
                     </span>
-                    ${filteredBoards.length > 0 ? `
+                    <div class="relative" data-tooltip="${state.votingFilterEnabled ? 'Disable filtering by voting boards' : 'Filter by voting boards'}">
+                        <button onclick="toggleVotingFilter('${notificationId}')"
+                                class="text-xs h-8 px-2 rounded ${state.votingFilterEnabled ? 'text-sky-400 bg-sky-400/10' : 'text-gray-400 hover:text-gray-300 hover:bg-gray-400/10'} transition-colors flex items-center gap-1.5">
+                            <i class="ph ph-lightbulb text-lg"></i>
+                            <span>Voting (${votingBoardsCount})</span>
+                        </button>
+                    </div>
+                    <div class="relative" data-tooltip="${state.myEstimationsFilterEnabled ? 'Disable filtering by My estimations' : 'Filter by My estimations'}">
+                        <button onclick="toggleMyEstimationsFilter('${notificationId}')"
+                                class="text-xs h-8 px-2 rounded ${state.myEstimationsFilterEnabled ? 'text-green-400 bg-green-400/10' : 'text-gray-400 hover:text-gray-300 hover:bg-gray-400/10'} transition-colors flex items-center gap-1.5">
+                            <i class="ph ph-list-numbers text-lg"></i>
+                            <span>Evals (${myEstimationsCount})</span>
+                        </button>
+                    </div>
+                    <div class="relative" data-tooltip="${state.facilitatorFilterEnabled ? 'Disable filtering by Facilitator' : 'Filter by Facilitator'}">
+                        <button onclick="toggleFacilitatorFilter('${notificationId}')"
+                                class="text-xs h-8 px-2 rounded ${state.facilitatorFilterEnabled ? 'text-purple-400 bg-purple-400/10' : 'text-gray-400 hover:text-gray-300 hover:bg-gray-400/10'} transition-colors flex items-center gap-1.5">
+                            <i class="ph ph-scales text-lg"></i>
+                            <span>Facilitator (${facilitatorCount})</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 text-xs">
+                    ${availableToAddCount > 0 ? `
                         <div class="relative" data-tooltip="Add filtered boards to your selection">
                             <button onclick="selectFilteredBoards('${notificationId}')"
-                                    class="text-sm h-8 px-2 rounded text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10 transition-colors flex items-center gap-1.5">
+                                    class="text-xs h-8 px-2 rounded text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10 transition-colors flex items-center gap-1.5">
                                 <i class="ph ph-plus-circle text-lg"></i>
-                                <span>Add (${filteredBoards.length})</span>
+                                <span>Add (${availableToAddCount})</span>
                             </button>
                         </div>
                     ` : ''}
-                </div>
-
-                <div class="flex items-center gap-2">
                     ${state.searchTerm && selectedFilteredCount > 0 ? `
                         <div class="relative" data-tooltip="Remove filtered boards from your selection">
                             <button onclick="unselectFilteredBoards('${notificationId}')"
-                                    class="text-sm h-8 px-2 rounded text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors flex items-center gap-1.5">
+                                    class="text-xs h-8 px-2 rounded text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors flex items-center gap-1.5">
                                 <i class="ph ph-minus-circle text-lg"></i>
                                 <span>Remove (${selectedFilteredCount})</span>
                             </button>
@@ -357,7 +459,7 @@ function renderBoardList(notificationId) {
                     ${state.selectedBoards.size > 0 ? `
                         <div class="relative" data-tooltip="Clear all selected boards">
                             <button onclick="unselectAllBoards('${notificationId}')"
-                                    class="text-sm h-8 px-2 rounded text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors flex items-center gap-1.5">
+                                    class="text-xs h-8 px-2 rounded text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-colors flex items-center gap-1.5">
                                 <i class="ph ph-x-circle text-lg"></i>
                                 <span>Clear (${state.selectedBoards.size})</span>
                             </button>
@@ -378,27 +480,36 @@ function renderBoardList(notificationId) {
     container.innerHTML = `
         ${controlsHTML}
         <div class="p-2 space-y-1">
-            ${filteredBoards.length ? 
-                filteredBoards.map(board => `
+            ${filteredBoards.length ?
+        filteredBoards.map(board => `
                     <div class="flex items-center gap-3 p-2 hover:bg-gray-700/50 rounded-lg transition-colors min-w-0">
-                        <input type="checkbox" 
-                               id="board-${notificationId}-${board.id}" 
+                        <input type="checkbox"
+                               id="board-${notificationId}-${board.id}"
                                class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-yellow-600 focus:ring-yellow-600/20 focus:ring-offset-0 flex-shrink-0"
                                ${state.selectedBoards.has(board.id) ? 'checked' : ''}
                                onchange="toggleBoard('${notificationId}', ${board.id}, '${board.name}')">
-                        <label for="board-${notificationId}-${board.id}" 
-                               class="text-sm text-gray-300 cursor-pointer truncate">
-                            ${highlightMatch(board.name, state.searchTerm)}
+                        <label for="board-${notificationId}-${board.id}"
+                               class="text-sm text-gray-300 cursor-pointer truncate flex-grow flex items-center gap-1">
+                            <span>${highlightMatch(board.name, state.searchTerm)}</span>
+                            ${board.myEstimations ? `
+                                <span class="text-sm text-gray-400 truncate flex items-center gap-1" data-tooltip="You are an estimator in this board"><i class="ph ph-list-numbers text-gray-400"></i></span>
+                            ` : ''}
+                            ${board.facilitator ? `
+                                <span class="text-sm text-gray-400 truncate flex items-center gap-1" data-tooltip="You are a facilitator in this board"><i class="ph ph-scales text-gray-400"></i></span>
+                            ` : ''}
                         </label>
+                        ${board.voting ? `
+                            <span class="text-sm text-gray-400 truncate flex items-center gap-1"><i class="ph ph-${board.voting.icon} text-gray-400"></i> ${highlightMatch(board.voting.name, state.searchTerm)}</span>
+                        `: ''}
                     </div>
-                `).join('') : 
-                noResultsHTML
-            }
+                `).join('') :
+        noResultsHTML
+    }
         </div>
     `;
 }
 
-// Обновим renderSelectedBoards для предотвращения горизонтального скролла
+// Обновим renderSelectedBoards для добавления тултипов к чипсам
 function renderSelectedBoards(notificationId) {
     const state = notificationStates.get(notificationId);
     const container = document.querySelector(`#${notificationId} .selected-boards`);
@@ -410,7 +521,8 @@ function renderSelectedBoards(notificationId) {
             <span class="bg-gray-700/50 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 text-gray-300 border border-gray-600/50 max-w-full">
                 <span class="truncate">${board.name}</span>
                 <button onclick="toggleBoard('${notificationId}', ${board.id}, '${board.name}')" 
-                        class="text-gray-400 hover:text-gray-200 transition-colors flex-shrink-0">
+                        class="text-gray-400 hover:text-gray-200 transition-colors flex-shrink-0"
+                        data-tooltip="Remove board from selection">
                     <i class="ph ph-x"></i>
                 </button>
             </span>
@@ -427,17 +539,21 @@ function renderSelectedBoards(notificationId) {
     }
 }
 
-// Добавим новые функции для массовых действий
+// Обновим функции массовых действий, чтобы они не закрывали дропдаун
 function selectFilteredBoards(notificationId) {
     const state = notificationStates.get(notificationId);
-    const filteredBoards = boards.filter(board => 
-        board.name.toLowerCase().includes(state.searchTerm.toLowerCase())
+    // Use the SAME filtering logic as renderBoardList
+    const filteredBoards = boards.filter(board =>
+        board.searchText.includes(state.searchTerm.toLowerCase()) &&
+        (!state.votingFilterEnabled || board.voting) &&
+        (!state.myEstimationsFilterEnabled || board.myEstimations) &&
+        (!state.facilitatorFilterEnabled || board.facilitator)
     );
-    
+
     filteredBoards.forEach(board => {
         state.selectedBoards.add(board.id);
     });
-    
+
     renderSelectedBoards(notificationId);
     renderBoardList(notificationId);
 }
@@ -454,22 +570,47 @@ function clearSearch(notificationId) {
     const searchInput = document.querySelector(`#${notificationId} .board-search`);
     
     state.searchTerm = '';
-    searchInput.value = ''; // Явно очищаем значение инпута
+    searchInput.value = '';
     renderBoardList(notificationId);
+    updateSearchControls(notificationId);
 }
 
-// Добавим новую функцию для снятия выделения с отфильтрованных бордов
 function unselectFilteredBoards(notificationId) {
     const state = notificationStates.get(notificationId);
-    const filteredBoards = boards.filter(board => 
-        board.name.toLowerCase().includes(state.searchTerm.toLowerCase())
+    // Use the SAME filtering logic as renderBoardList
+    const filteredBoards = boards.filter(board =>
+        board.searchText.includes(state.searchTerm.toLowerCase()) &&
+        (!state.votingFilterEnabled || board.voting) &&
+        (!state.myEstimationsFilterEnabled || board.myEstimations) &&
+        (!state.facilitatorFilterEnabled || board.facilitator)
     );
-    
+
     filteredBoards.forEach(board => {
         state.selectedBoards.delete(board.id);
     });
-    
+
     renderSelectedBoards(notificationId);
+    renderBoardList(notificationId);
+}
+
+// Toggle voting filter
+function toggleVotingFilter(notificationId) {
+    const state = notificationStates.get(notificationId);
+    state.votingFilterEnabled = !state.votingFilterEnabled;
+    renderBoardList(notificationId);
+}
+
+// Toggle My Estimations filter
+function toggleMyEstimationsFilter(notificationId) {
+    const state = notificationStates.get(notificationId);
+    state.myEstimationsFilterEnabled = !state.myEstimationsFilterEnabled;
+    renderBoardList(notificationId);
+}
+
+// Toggle Facilitator filter
+function toggleFacilitatorFilter(notificationId) {
+    const state = notificationStates.get(notificationId);
+    state.facilitatorFilterEnabled = !state.facilitatorFilterEnabled;
     renderBoardList(notificationId);
 }
 

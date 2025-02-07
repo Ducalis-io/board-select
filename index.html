@@ -57,7 +57,8 @@
                     <div class="relative">
                         <input type="text" 
                                class="board-search w-full bg-gray-700/50 rounded-lg pl-10 pr-24 py-2.5 text-sm text-gray-200 placeholder-gray-400 border border-gray-600/50 focus:border-gray-500/50 focus:outline-none focus:ring-0"
-                               placeholder="Search boards...">
+                               placeholder="Search boards..."
+                               data-tooltip="Click to search and manage boards...">
                         <i class="ph ph-magnifying-glass absolute left-3 top-2.5 text-gray-400"></i>
                         <button class="search-clear-btn hidden absolute right-3 top-1.5 px-2 py-1 text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1.5 text-sm">
                             <span>esc</span>
@@ -112,26 +113,25 @@
         }
 
         /* Добавим стили для тултипов */
-        [data-tooltip] {
+        [data-tooltip]{
             position: relative;
         }
 
-        [data-tooltip]:before {
+        [data-tooltip]:before{
             content: attr(data-tooltip);
             position: absolute;
-            bottom: 100%;
+            bottom: calc(100% + 8px);
             left: 50%;
             transform: translateX(-50%);
-            margin-bottom: 8px;
-            padding: 6px 10px;
+            padding: 4px 8px;
             background: rgba(0, 0, 0, 0.8);
             color: white;
             font-size: 12px;
-            white-space: nowrap;
             border-radius: 4px;
             opacity: 0;
             visibility: hidden;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, visibility 0.2s, transform 0.2s;
+            z-index: 20;
         }
 
         [data-tooltip]:hover:before {
@@ -154,9 +154,9 @@
         }
 
         /* Обновляем стили для тултипов */
-        [data-tooltip]:before {
+        /* [data-tooltip]:before {
             z-index: 20;
-        }
+        } */
 
         /* Обновляем позиционирование тултипов для кнопок в дропдауне */
         .board-dropdown [data-tooltip]:before {
@@ -188,18 +188,38 @@
             margin: 0;
         }
 
-        /* Предотвращаем обрезание тултипов */
-        .board-dropdown {
-            padding: 8px 0; /* Добавляем отступы сверху и снизу */
-        }
-
         /* Фиксируем позицию кнопки очистки поиска */
         .search-clear-btn {
+            position: absolute !important;
+            right: 12px !important;
             top: 50% !important;
-            transform: translateY(-50%);
+            transform: translateY(-50%) !important;
             height: 28px;
             display: inline-flex;
             align-items: center;
+            background: transparent;
+            border: none;
+            padding: 0 8px;
+            margin: 0;
+            z-index: 10;
+        }
+
+        /* Обеспечиваем место для кнопки в инпуте */
+        .board-search {
+            padding-right: 100px !important;
+        }
+
+        /* Тултипы для кнопок действий в дропдауне */
+        .board-list-header > div > [data-tooltip]:before {
+            bottom: auto;
+            top: calc(100% + 8px); /* Смещаем тултип вниз на 8px */
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 0;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s, visibility 0.2s, transform 0.2s;
+            z-index: 10;
         }
     </style>
 
